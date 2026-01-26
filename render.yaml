@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: ai-ads-ugc-server
+    env: node
+    plan: free
+    buildCommand: npm install && npm run prisma:generate
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "25.4.0"
