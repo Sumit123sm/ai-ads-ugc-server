@@ -3,7 +3,8 @@ services:
     name: ai-ads-ugc-server
     env: node
     plan: free
-    buildCommand: npm install && npm run prisma:generate
+    buildCommand: npm install
+    preDeployCommand: npm run prisma:generate && npm run prisma:migrate:deploy
     startCommand: npm start
     envVars:
       - key: NODE_VERSION
