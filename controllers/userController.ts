@@ -18,13 +18,17 @@ export const getUserCredits = async (req: Request, res: Response) => {
 
     // If user not found in database, create them with default 20 credits
     if (!user) {
-      const clerkUser = await req.auth().getToken();
+      const auth = req.auth();
+      let clerkUser = null as any;
+      if (auth.getToken) {
+        clerkUser = await auth.getToken();
+      }
       user = await prisma.user.create({
         data: {
           id: userId,
-          email: req.auth().sessionClaims?.email as string || '',
-          name: req.auth().sessionClaims?.name as string || 'User',
-          image: req.auth().sessionClaims?.image_url as string || '',
+          email: auth.sessionClaims?.email as string || '',
+          name: auth.sessionClaims?.name as string || 'User',
+          image: auth.sessionClaims?.image_url as string || '',
         },
       });
     }
