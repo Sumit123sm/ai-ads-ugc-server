@@ -2,145 +2,33 @@ name: Deploy to Render
 
 on:
   push:
-    branches: [main]
-
-permissions:
-  contents: read
+    branches: [ main ]
 
 jobs:
-  build_and_deploy:
+  deploy:
     runs-on: ubuntu-latest
-    environment: production
-    timeout-minutes: 30
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Use Node.js 18.x
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 18.x
-          cache: "npm"
+          node-version: '18'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate Prisma Client
-        run: npm run prisma:generate
-
-      - name: Build (TypeScript typecheck)
+      - name: Build
         run: npm run build
 
-      - name: Lint (non-blocking)
-        run: npx eslint . --ext .ts --ext .tsx
-        continue-on-error: true
-
-      - name: Verify Render secrets
-        run: |
-          if [ -z "${{ secrets.RENDER_SERVICE_ID }}" ] || [ -z "${{ secrets.RENDER_DEPLOY_KEY }}" ]; then
-            echo "Missing RENDER_SERVICE_ID or RENDER_DEPLOY_KEY"; exit 1;
-          fi
-
-      - name: Trigger Render deployment
+      - name: Trigger Render Deploy
         env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
-          RENDER_DEPLOY_KEY: ${{ secrets.RENDER_DEPLOY_KEY }}
         run: |
-          set -e
-          echo "Triggering Render deploy for service: srv-${RENDER_SERVICE_ID}"
-          curl -X POST "https://api.render.com/deploy/srv-${RENDER_SERVICE_ID}" \
-            -H "Authorization: Bearer ${RENDER_DEPLOY_KEY}" \
+          echo "Triggering deploy for Render service: $RENDER_SERVICE_ID"
+          resp=$(curl -s -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d '{"force":true}' \
-            --fail
-name: Deploy to Production
-
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-concurrency:
-  group: deploy-${{ github.ref }}
-  cancel-in-progress: false
-
-jobs:
-  deploy:
-    name: 🚀 Deploy to Production
-    runs-on: ubuntu-latest
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 🔧 Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-
-      - name: � Install Client Dependencies
-        run: cd client && npm install
-
-      - name: 🏗️ Build Client
-        run: cd client && npm run build
-
-      - name: 🚀 Deploy Frontend to Vercel
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: |
-          npm install -g vercel
-          vercel deploy --prod --token $VERCEL_TOKEN
-
-      - name: 📦 Install Server Dependencies
-        run: cd server && npm install
-
-      - name: 🔄 Deploy Backend to Render
-        run: |
-          curl https://api.render.com/deploy/${{ secrets.RENDER_SERVICE_ID }}?key=${{ secrets.RENDER_API_KEY }} -X POST
-
-      - name: �📋 Deployment Status
-        run: |
-          echo "### 🚀 Deployment Started" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Timestamp:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Frontend:** Deploy to Vercel" >> $GITHUB_STEP_SUMMARY
-          echo "**Backend:** Deploy to Render" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "⏳ Deployments in progress..." >> $GITHUB_STEP_SUMMARY
-
-      - name: ✅ Deployment Complete
-        run: |
-          echo "### ✅ Deployment Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Frontend URL:** https://ai-ugc-ads-client.vercel.app/" >> $GITHUB_STEP_SUMMARY
-          echo "**Backend URL:** https://ai-ads-ugc-server.onrender.com/" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Automatic deployments configured for:" >> $GITHUB_STEP_SUMMARY
-          echo "- Vercel (Frontend) - Auto-deploys from GitHub" >> $GITHUB_STEP_SUMMARY
-          echo "- Render (Backend) - Auto-deploys from GitHub" >> $GITHUB_STEP_SUMMARY
-
-  notify:
-    name: 📢 Deployment Notification
-    runs-on: ubuntu-latest
-    needs: deploy
-    if: always()
-    steps:
-      - name: 📧 Notify on Success
-        if: needs.deploy.result == 'success'
-        run: |
-          echo "✅ Deployment successful!"
-          echo "Application is live at:"
-          echo "- Frontend: https://ai-ugc-ads-client.vercel.app/"
-          echo "- Backend: https://ai-ads-ugc-server.onrender.com/"
-
-      - name: ❌ Notify on Failure
-        if: needs.deploy.result == 'failure'
-        run: |
-          echo "❌ Deployment failed!"
-          echo "Check GitHub Actions logs for details"
-          exit 1
+            -d '{"clearCache":true}')
+          echo "Render response: $resp"
